@@ -21,7 +21,7 @@ async function init() {
     post("status", { text: "numpy 준비 중…" });
     await pyodide.loadPackage(["numpy"]);
     post("status", { text: "model.py 불러오는 중…" });
-    const res = await fetch("model.py?v=2");
+    const res = await fetch("model.py?v=3");
     if (!res.ok) throw new Error("model.py를 읽지 못했습니다 (" + res.status + ")");
     pyodide.FS.writeFile("/home/pyodide/model.py", await res.text());
     pyodide.runPython("import sys\nif '/home/pyodide' not in sys.path: sys.path.insert(0, '/home/pyodide')");

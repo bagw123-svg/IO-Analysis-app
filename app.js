@@ -78,7 +78,7 @@
   }
   function startWorker() {
     try {
-      worker = new Worker("worker.js?v=2");
+      worker = new Worker("worker.js?v=3");
       worker.onmessage = onWorkerMessage;
       worker.onerror = function (ev) { setEngine("Python 엔진 오류", "fail"); $("load-msg").textContent = "작업자 오류: " + (ev.message || ""); };
     } catch (err) {
@@ -130,7 +130,7 @@
     $("load-bar").value = 0;
     $("load-note").hidden = false;
     $("load-note").textContent = lv === "basic"
-      ? "기본부문(12MB)은 브라우저에서 Excel을 읽는 데 1~2분 걸릴 수 있습니다. 창을 닫지 말고 기다려 주세요."
+      ? "기본부문(12MB)은 내려받고 읽는 데 수십 초 걸릴 수 있습니다. 창을 닫지 말고 기다려 주세요."
       : "Excel을 읽고 지표를 계산하고 있습니다…";
     try {
       var info = await call("load", { level: lv, file: cfg.file, label: cfg.label });
@@ -257,7 +257,8 @@
       (x.via && x.via.length ? "<small>다른 분류 일치: " + esc(x.via.join(" / ")) + "</small>" : "") + "</button>";
   }
   function renderSearchList() {
-    $("s-count").textContent = "전체 " + state.inds.length + "개 산업 중 앞의 80개입니다. 검색어를 입력해 좁혀 보세요.";
+    var n = state.inds.length;
+    $("s-count").textContent = n > 80 ? "전체 " + n + "개 산업 중 앞의 80개입니다. 검색어를 입력해 좁혀 보세요." : "전체 " + n + "개 산업입니다. 검색어를 입력하거나 산업을 눌러 상세 분석을 보세요.";
     $("s-results").innerHTML = state.inds.slice(0, 80).map(function (x) { return resultCard({ c: x.c, n: x.n, direct: false, via: [] }); }).join("");
   }
   async function doSearch() {

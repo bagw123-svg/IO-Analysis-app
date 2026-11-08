@@ -5,16 +5,28 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>2023 산업연관분석 웹앱</title>
   <meta name="description" content="한국은행 2023년 산업연관표(연장표) 투입산출표를 브라우저의 Python(Pyodide)으로 읽고 산업연관분석을 수행하는 웹앱">
-  <link rel="stylesheet" href="style.css?v=2">
+  <meta name="theme-color" content="#2e7d6b">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;700&display=swap">
+  <link rel="stylesheet" href="style.css?v=3">
 </head>
 <body>
-<header class="top">
-  <div class="wrap">
-    <div>
-      <h1>2023 산업연관분석 웹앱</h1>
-      <p>한국은행 2023년 산업연관표(연장표) · 투입산출표(생산자가격) · 브라우저 안의 Python(Pyodide)으로 계산</p>
+<header class="hero">
+  <div class="wrap hero-grid">
+    <div class="hero-text">
+      <p class="hero-src">한국은행 2023년 산업연관표(연장표), 생산자가격 투입산출표</p>
+      <h1>산업은 서로를<br>얼마나 사고팔까</h1>
+      <p class="hero-lead">33개에서 380개 산업까지, 투입산출표를 브라우저 안의 Python이 직접 읽어 생산·부가가치·수입 유발효과를 계산합니다. 서버 없이 GitHub Pages에서 동작합니다.</p>
+      <p class="formula" aria-label="생산 유발 공식: X 는 I 빼기 A d 의 역행렬 곱하기 f">X = (I − A<sup>d</sup>)<sup>−1</sup> f</p>
+      <div id="engine" class="engine" role="status">Python 엔진 준비 중…</div>
     </div>
-    <div id="engine" class="engine" role="status">Python 엔진 준비 중…</div>
+    <figure class="matrix" id="matrix">
+      <div class="matrix-grid" id="matrix-grid" aria-hidden="true"></div>
+      <figcaption>
+        <span class="matrix-read" id="matrix-read" aria-live="polite">대분류 33개 산업의 투입계수. 세로는 공급하는 산업, 가로는 구매하는 산업이며 진할수록 생산 1원당 투입이 많습니다. 칸을 가리키거나 눌러 보세요.</span>
+      </figcaption>
+    </figure>
   </div>
 </header>
 
@@ -23,16 +35,16 @@
 
   <!-- 1. 자료 불러오기 -->
   <section class="card" id="sec-load">
-    <h2>1. 투입산출표 불러오기</h2>
-    <p class="muted">분석에 사용할 분류를 고르고 버튼을 누르면 저장소의 Excel 파일(<code>data/</code>)을 Python이 읽어 들입니다. 분류가 세분될수록 파일이 커서 시간이 더 걸립니다.</p>
-    <div class="chips" id="levels">
-      <label class="chip"><input type="radio" name="level" value="large" checked> <b>대분류</b> <small>33개 부문 · 0.6MB</small></label>
-      <label class="chip"><input type="radio" name="level" value="mid"> <b>중분류</b> <small>83개 부문 · 1.2MB</small></label>
-      <label class="chip"><input type="radio" name="level" value="small"> <b>소분류</b> <small>165개 부문 · 3.1MB</small></label>
-      <label class="chip"><input type="radio" name="level" value="basic"> <b>기본부문</b> <small>380개 부문 · 12.3MB</small></label>
+    <h2>투입산출표 불러오기</h2>
+    <p class="muted">분류를 고르고 불러오기를 누르면 저장소의 Excel 파일(<code>data/</code>)을 Python이 읽습니다. 세분된 분류일수록 파일이 커서 조금 더 걸립니다.</p>
+    <div class="levels" id="levels" role="radiogroup" aria-label="분류 선택">
+      <label class="level"><input type="radio" name="level" value="large" checked><span class="lv-n">33</span><b>대분류</b><small>0.6MB</small></label>
+      <label class="level"><input type="radio" name="level" value="mid"><span class="lv-n">83</span><b>중분류</b><small>1.2MB</small></label>
+      <label class="level"><input type="radio" name="level" value="small"><span class="lv-n">165</span><b>소분류</b><small>3.1MB</small></label>
+      <label class="level"><input type="radio" name="level" value="basic"><span class="lv-n">380</span><b>기본부문</b><small>12.3MB</small></label>
     </div>
     <div class="row">
-      <button id="btn-load" class="primary" disabled>📥 투입산출표 불러오기</button>
+      <button id="btn-load" class="primary" disabled>투입산출표 불러오기</button>
       <span id="load-msg" class="muted">Python 엔진이 준비되면 누를 수 있습니다.</span>
     </div>
     <progress id="load-bar" max="100" value="0" hidden></progress>
@@ -66,7 +78,7 @@
       <div class="scroll" id="tb-acct"></div>
       <h3>계수표·역행렬 심화 검증</h3>
       <p class="muted">Excel의 투입계수·유발계수 표를 Python이 다시 계산한 값과 비교합니다. 기본부문은 시간이 오래 걸릴 수 있습니다.</p>
-      <div class="row"><button id="btn-deep">🔎 심화 검증 실행</button><span id="deep-msg" class="muted"></span></div>
+      <div class="row"><button id="btn-deep">심화 검증 실행</button><span id="deep-msg" class="muted"></span></div>
       <div class="scroll" id="tb-deep"></div>
     </section>
 
@@ -115,7 +127,7 @@
       <div class="chips" id="r-types"></div>
       <div class="row">
         <input id="r-q" type="search" placeholder="산업 이름·코드 필터" class="grow">
-        <button id="r-csv">⬇ 표 CSV 저장</button>
+        <button id="r-csv">표를 CSV로 저장</button>
       </div>
       <p class="muted">열 제목을 누르면 정렬됩니다.</p>
       <div class="scroll tall" id="r-table"></div>
@@ -141,7 +153,7 @@
       <datalist id="ind-list"></datalist>
       <div id="sim-rows"></div>
       <div class="row">
-        <button id="sim-add">＋ 산업 추가</button>
+        <button id="sim-add">산업 추가</button>
         <button id="sim-run" class="primary">계산하기</button>
         <span id="sim-msg" class="muted"></span>
       </div>
@@ -166,7 +178,7 @@
         <li>수출률 = 수출 ÷ 총산출, 수입률 = 수입계 ÷ 총공급(= 총수요), 중간수요율 = 중간수요 ÷ 총수요</li>
         <li>생산유발계수 B = (I − Ad)<sup>-1</sup>, 부가가치유발계수 V = v̂B, 수입유발계수 M = Am·B</li>
         <li>영향력계수(후방연쇄) = B의 열합 ÷ 열합 평균, 감응도계수(전방연쇄) = B의 행합 ÷ 행합 평균</li>
-        <li>산업 유형: 영향력·감응도 모두 1 이상이면 <i>중추형</i>, 영향력만 크면 <i>최종수요 의존형</i>, 감응도만 크면 <i>중간재 공급형</i>, 둘 다 작으면 <i>독립형</i></li>
+        <li>산업 유형: 영향력·감응도 모두 1 이상이면 <i>중추형</i>, 영향력만 크면 <i>최종수요 의존형</i>, 감응도만 크면 <i>중간재 공급형</i>, 둘 다 작으면 <i>독립형</i>, 총산출이 0이면 <i>산출 없음</i></li>
       </ul>
       <h3>한계</h3>
       <ul>
@@ -182,9 +194,39 @@
   </div>
 </main>
 
-<footer class="wrap foot">
-  <p>자료: 한국은행 2023년 산업연관표(연장표) · 계산 엔진: Pyodide(Python 3, numpy) · GitHub Pages 정적 호스팅</p>
+<footer class="foot">
+  <div class="wrap foot-grid">
+    <p>자료: 한국은행 경제통계시스템(ECOS) 「2023년 산업연관표(연장표)」와 2025년 9월 24일 보도자료. 금액 단위는 백만원(2023년 당해년 가격)입니다.</p>
+    <p>계산 엔진: Pyodide(Python 3, numpy). 정적 호스팅: GitHub Pages. <a href="https://github.com/bagw123-svg/IO-Analysis-app" target="_blank" rel="noopener">저장소와 README 보기</a></p>
+  </div>
 </footer>
-<script src="app.js?v=2"></script>
+<script>
+/* 첫 화면 행렬 그림: 대분류 33개 산업 투입계수(총투입계수표, Excel 값 x 10000) */
+(function () {
+  var D = {"c":["A","B","C01","C02","C03","C04","C05","C06","C07","C08","C09","C10","C11","C12","C13","C14","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T"],"n":["농림수산품","광산품","음식료품","섬유 및 가죽제품","목재 및 종이, 인쇄","석탄 및 석유제품","화학제품","비금속광물제품","1차 금속제품","금속가공제품","컴퓨터, 전자 및 광학기기","전기장비","기계 및 장비","운송장비","기타 제조업제품","제조임가공 및 산업용 장비 수리","전력, 가스 및 증기","수도, 폐기물처리 및 재활용서비스","건설","도소매 및 상품중개서비스","운송서비스","음식점 및 숙박서비스","정보통신 및 방송서비스","금융 및 보험서비스","부동산서비스","전문, 과학 및 기술 서비스","사업지원서비스","공공행정, 국방 및 사회보장","교육서비스","보건 및 사회복지서비스","예술, 스포츠 및 여가 관련 서비스","기타 서비스","기타"],"v":"575,7,2456,38,118,0,35,1,0,1,0,0,0,0,5,56,0,3,12,3,1,600,1,1,0,2,1,16,46,41,11,9,7,0,6,3,1,6,6121,230,1025,1732,3,1,1,1,0,1,8,4522,13,8,0,0,1,0,0,0,0,1,1,0,1,0,0,0,1821,30,2043,181,16,2,52,6,4,8,1,1,4,0,4,66,110,18,1,54,11,2799,15,7,1,47,51,58,207,152,428,135,109,93,35,8,3127,109,6,44,33,9,29,12,10,8,37,589,277,3,62,5,45,88,71,11,5,6,16,82,34,14,42,86,106,35,117,21,204,59,3079,8,53,84,13,78,9,33,19,4,657,42,52,0,177,108,67,96,92,69,8,143,44,45,62,59,48,102,20,210,239,20,26,55,481,1165,474,38,39,3,30,18,14,16,105,271,165,137,240,1113,155,19,6,34,123,64,166,168,71,55,134,45,720,412,259,972,679,200,3435,500,162,661,631,1007,300,646,1036,205,159,518,357,133,71,217,37,5,10,289,277,80,82,1503,117,457,64,5,17,50,6,11,9,43,1500,170,45,62,105,28,68,89,21,0,45,870,3,3,33,1,0,3,10,16,16,9,3,22,7,9,12,15,1,0,8,32,90,178,3260,1920,210,1060,727,782,610,110,27,41,751,0,6,1,0,0,0,12,0,0,0,17,0,0,18,11,221,130,35,109,164,71,131,82,1536,85,302,1066,559,515,133,57,131,744,29,49,78,12,6,7,35,76,86,31,16,40,117,31,25,25,10,6,41,47,19,19,25,83,3474,831,479,340,52,246,77,108,35,78,39,68,458,26,23,385,112,54,127,199,81,321,103,17,177,7,10,37,27,14,65,29,102,255,2541,456,767,108,210,141,233,452,48,147,114,145,16,31,234,172,48,51,27,71,392,23,18,227,19,5,17,78,21,31,38,191,48,87,2103,289,19,152,74,282,328,16,45,17,6,2,12,37,27,27,24,11,23,17,13,29,322,2,2,16,15,8,39,9,20,1,5,38,2849,7,372,10,138,1,17,456,8,7,1,2,103,61,177,11,10,17,980,16,2,8,15,57,9,1,2,2,2,9,2,2,3,2,610,22,1,48,72,24,10,124,21,10,36,55,67,33,160,37,205,99,24,33,286,301,1423,322,25,253,270,220,420,593,402,651,249,703,1274,27,97,6,13,4,5,12,2,3,9,70,11,18,51,20,7,3,239,581,187,211,462,266,362,494,715,138,337,102,115,147,68,84,1700,218,22,95,167,62,55,43,78,195,33,56,225,89,142,95,5,12,27,45,55,103,7,131,125,270,66,7,16,40,14,19,26,22,535,10,4,21,129,17,13,95,28,31,52,90,90,65,77,16,12,61,6,3,9,6,6,7,9,10,2,6,5,1,5,2,19,28,1,10,6,39,17,3,693,24,25,42,11,4,23,20,16,542,174,738,888,621,151,433,427,250,340,401,438,414,429,864,244,237,248,360,453,151,766,408,23,28,191,177,110,164,618,291,439,87,259,1501,348,380,422,97,312,1137,280,280,133,163,225,113,367,159,46,723,102,781,1640,154,79,33,27,130,167,138,51,75,71,147,387,66,223,39,79,103,16,50,78,47,87,40,38,76,37,86,271,26,169,33,413,118,67,161,192,98,372,336,294,276,254,355,630,15,25,49,21,27,66,31,23,33,33,41,47,26,35,24,93,64,13,139,25,275,111,106,1681,460,48,660,189,243,297,72,642,190,78,158,123,100,153,151,67,111,135,90,134,92,99,143,90,130,71,100,171,137,237,122,161,114,1834,788,99,109,236,200,204,181,225,0,5,12,19,40,35,7,13,13,11,16,11,19,11,10,50,46,5,129,16,493,81,479,101,164,290,258,152,57,251,186,98,224,7,166,484,527,268,300,199,503,429,384,315,364,395,405,373,470,393,150,703,836,576,358,228,687,296,156,698,485,172,298,74,233,296,15,31,481,49,75,118,46,52,67,123,103,87,59,48,138,75,436,90,382,285,329,555,86,444,431,442,483,887,294,252,144,537,114,10,15,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,30,0,0,0,0,0,0,0,0,0,0,0,8618,0,2,2,2,4,2,4,4,4,8,3,4,6,2,2,26,2,6,2,22,3,4,7,15,7,12,6,1,5,1,3,12,1,11,27,7,8,12,2,6,8,6,13,5,7,12,8,11,21,2,34,12,33,7,22,14,19,8,22,19,4,19,25,31,20,2,9,69,7,14,17,4,9,13,14,18,4,7,12,3,11,28,4,30,8,10,29,6,95,27,10,54,37,8,71,16,416,45,3,13,58,16,15,20,8,10,27,19,26,13,17,22,10,13,65,4,87,17,90,150,29,34,40,16,75,101,18,85,20,81,77,2,36,30,5,3,13,8,21,5,2,10,2,3,5,1,7,45,9,10,1,12,2,11,20,3,20,7,12,2,2,17,16,7,218"};
+  var grid = document.getElementById("matrix-grid"), read = document.getElementById("matrix-read");
+  if (!grid) return;
+  var v = D.v.split(",").map(Number), n = D.c.length, cap = 3500, html = [];
+  for (var i = 0; i < n; i++) for (var j = 0; j < n; j++) {
+    var x = v[i * n + j], lv = x <= 5 ? 0 : Math.min(9, Math.ceil(Math.sqrt(Math.min(x / cap, 1)) * 9));
+    html.push('<i class="h' + lv + '" data-k="' + (i * n + j) + '" style="--d:' + (i + j) + '"></i>');
+  }
+  grid.innerHTML = html.join("");
+  var base = read.textContent, last = null;
+  function show(el) {
+    if (!el || el.tagName !== "I") return;
+    if (last) last.classList.remove("on");
+    last = el; el.classList.add("on");
+    var k = +el.getAttribute("data-k"), i = Math.floor(k / n), j = k % n;
+    read.innerHTML = "<b>" + D.n[j] + "</b>(" + D.c[j] + ") 생산 1원당 <b>" + D.n[i] + "</b>(" + D.c[i] + ") 투입액 " +
+      (v[k] / 10000).toFixed(4) + "원";
+  }
+  grid.addEventListener("pointerover", function (e) { show(e.target); });
+  grid.addEventListener("click", function (e) { show(e.target); });
+  grid.addEventListener("pointerleave", function () { if (last) last.classList.remove("on"); last = null; read.textContent = base; });
+  requestAnimationFrame(function () { document.getElementById("matrix").classList.add("in"); });
+})();
+</script>
+<script src="app.js?v=3"></script>
 </body>
 </html>

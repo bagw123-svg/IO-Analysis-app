@@ -412,7 +412,7 @@ METRIC_META = [
 
 def _type_of(infl, sens):
     if not (math.isfinite(infl) and math.isfinite(sens)):
-        return "-"
+        return "산출 없음(총산출 0)"
     if infl >= 1 and sens >= 1:
         return "중추형(영향력·감응도 모두 큼)"
     if infl >= 1:
