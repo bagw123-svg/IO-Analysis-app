@@ -5,7 +5,7 @@
 
 - GitHub: 코드와 Excel 파일 보관
 - GitHub Pages: 웹사이트 파일 제공
-- 방문자의 브라우저: Pyodide로 Python 실행 → Excel 읽기, 검증, 산업연관분석
+- 방문자의 브라우저: Pyodide로 Python 실행 → Excel 읽기, 검증, 산업연관분석 (Excel은 추가 패키지 없이 Python 표준 라이브러리 zipfile·xml로 직접 읽고, 계산에는 numpy만 사용)
 
 게시 주소: `https://사용자이름.github.io/저장소이름`
 

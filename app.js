@@ -78,7 +78,7 @@
   }
   function startWorker() {
     try {
-      worker = new Worker("worker.js");
+      worker = new Worker("worker.js?v=2");
       worker.onmessage = onWorkerMessage;
       worker.onerror = function (ev) { setEngine("Python 엔진 오류", "fail"); $("load-msg").textContent = "작업자 오류: " + (ev.message || ""); };
     } catch (err) {
