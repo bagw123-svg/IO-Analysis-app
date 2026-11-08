@@ -1,6 +1,7 @@
 """model.py - 산업연관표(투입산출표) Excel 읽기, 검증, 산업연관분석 계산.
 
-브라우저의 Pyodide(WebAssembly)에서 실행되며 numpy + openpyxl만 사용한다.
+브라우저의 Pyodide(WebAssembly)에서 실행되며 numpy와 Python 표준 라이브러리(zipfile, xml)만 사용한다.
+Excel(.xlsx)은 추가 패키지 없이 직접 읽는다.
 worker.js 가 handle(cmd, args_json) 을 호출하고, 결과는 JSON 문자열로 돌려준다.
 
 단위 규칙
@@ -10,10 +11,12 @@ worker.js 가 handle(cmd, args_json) 을 호출하고, 결과는 JSON 문자열�
 """
 import json
 import math
+import re
 import traceback
+import xml.etree.ElementTree as ET
+import zipfile
 
 import numpy as np
-import openpyxl
 
 LEVELS = {"large": "대분류", "mid": "중분류", "small": "소분류", "basic": "기본부문"}
 LEVEL_ORDER = ["basic", "small", "mid", "large"]  # 상품분류표 열 순서(세분 -> 광범위)
@@ -104,11 +107,120 @@ def _arr(a, nd=6):
     return [_f(v, nd) for v in np.asarray(a, float).ravel().tolist()]
 
 
+# ----------------------------------------------------------------------------- 최소 xlsx 읽기 (표준 라이브러리만 사용)
+_M = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
+_R = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
+
+
+def _col_index(ref):
+    n = 0
+    for ch in ref:
+        if ch.isalpha():
+            n = n * 26 + (ord(ch.upper()) - 64)
+        else:
+            break
+    return n - 1
+
+
+def _to_num(text):
+    t = text.strip()
+    if "." in t or "E" in t or "e" in t:
+        return float(t)
+    return int(t)
+
+
+class Book:
+    """.xlsx 파일(zip + XML)에서 시트 이름과 셀 값을 읽는다. 값은 수식의 저장된 결과값이다."""
+
+    def __init__(self, path):
+        self.z = zipfile.ZipFile(path)
+        wb = ET.fromstring(self.z.read("xl/workbook.xml"))
+        rels = ET.fromstring(self.z.read("xl/_rels/workbook.xml.rels"))
+        target = {r.get("Id"): r.get("Target") for r in rels}
+        self.sheets = {}
+        for sh in wb.iter(_M + "sheet"):
+            t = target[sh.get(_R + "id")].lstrip("/")
+            self.sheets[sh.get("name")] = t if t.startswith("xl/") else "xl/" + t
+        self.sheetnames = list(self.sheets)
+        self._sst = None
+
+    def close(self):
+        try:
+            self.z.close()
+        except Exception:
+            pass
+
+    def _shared(self):
+        if self._sst is None:
+            out = []
+            if "xl/sharedStrings.xml" in self.z.namelist():
+                with self.z.open("xl/sharedStrings.xml") as f:
+                    for _, el in ET.iterparse(f, events=("end",)):
+                        if el.tag == _M + "si":
+                            parts = []
+                            for ch in el:
+                                if ch.tag == _M + "t":
+                                    parts.append(ch.text or "")
+                                elif ch.tag == _M + "r":
+                                    parts.extend((x.text or "") for x in ch.findall(_M + "t"))
+                            out.append("".join(parts))
+                            el.clear()
+            self._sst = out
+        return self._sst
+
+    def dims(self, name):
+        """(행 수, 열 수) - 시트 머리의 dimension 정보만 읽는다."""
+        with self.z.open(self.sheets[name]) as f:
+            head = f.read(4096).decode("utf-8", "ignore")
+        m = re.search(r'<dimension ref="([A-Z]+)(\d+)(?::([A-Z]+)(\d+))?"', head)
+        if not m:
+            return None, None
+        if m.group(3):
+            return int(m.group(4)), _col_index(m.group(3)) + 1
+        return int(m.group(2)), _col_index(m.group(1)) + 1
+
+    def rows(self, name):
+        """시트 전체를 행 목록(list of list)으로 돌려준다. 빈 칸은 None, 행·열 번호는 엑셀과 같다."""
+        sst = self._shared()
+        out = []
+        with self.z.open(self.sheets[name]) as f:
+            for _, el in ET.iterparse(f, events=("end",)):
+                if el.tag != _M + "row":
+                    continue
+                rn = int(el.get("r") or (len(out) + 1))
+                while len(out) < rn - 1:
+                    out.append([])
+                vals = []
+                for c in el.findall(_M + "c"):
+                    ref = c.get("r")
+                    ci = _col_index(ref) if ref else len(vals)
+                    while len(vals) <= ci:
+                        vals.append(None)
+                    t = c.get("t")
+                    v = c.find(_M + "v")
+                    if t == "inlineStr":
+                        node = c.find(_M + "is")
+                        val = "".join((x.text or "") for x in node.iter(_M + "t")) if node is not None else None
+                    elif v is None or v.text is None:
+                        val = None
+                    elif t == "s":
+                        val = sst[int(v.text)]
+                    elif t in ("str", "e"):
+                        val = v.text
+                    elif t == "b":
+                        val = v.text.strip() == "1"
+                    else:
+                        val = _to_num(v.text)
+                    vals[ci] = val
+                out.append(vals)
+                el.clear()
+        return out
+
+
 # ----------------------------------------------------------------------------- Excel 읽기
 def _read_grid(sheet_name):
     """투입산출표 시트 한 장을 읽어 {cc, cn, rc, rn, M, ci, ri} 로 돌려준다."""
-    ws = S["wb"][sheet_name]
-    rows = [r for r in ws.iter_rows(values_only=True)]
+    rows = S["wb"].rows(sheet_name)
     hi = None
     for i, r in enumerate(rows[:12]):
         if r and r[0] is not None and "상품" in str(r[0]):
@@ -175,8 +287,9 @@ def _rowv(g, code, cols):
 
 # ----------------------------------------------------------------------------- 상품분류표
 def _read_classification(path):
-    wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
-    rows = [r for r in wb.worksheets[0].iter_rows(values_only=True)]
+    bk = Book(path)
+    rows = bk.rows(bk.sheetnames[0])
+    bk.close()
     recs = []
     cur = {"small": None, "mid": None, "large": None}
     for r in rows[3:]:
@@ -234,7 +347,7 @@ def load(a):
         pass
     S["level"] = level
     _log("Excel 파일 여는 중")
-    S["wb"] = openpyxl.load_workbook(path, read_only=True, data_only=True)
+    S["wb"] = Book(path)
     S["grids"] = {}
     S["cache"] = {}
     _log("상품분류표 읽는 중")
@@ -273,8 +386,7 @@ def _sheet_list():
             gg = S["grids"][key]
             info["rows"], info["cols"] = len(gg["rc"]), len(gg["cc"])
         elif info["present"]:
-            ws = S["wb"][name]
-            info["rows"], info["cols"] = ws.max_row, ws.max_column
+            info["rows"], info["cols"] = S["wb"].dims(name)
         out.append(info)
     return out
 

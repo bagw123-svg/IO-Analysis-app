@@ -18,10 +18,10 @@ async function init() {
   try {
     post("status", { text: "Python(Pyodide) 내려받는 중…" });
     pyodide = await loadPyodide({ indexURL: PYODIDE_URL });
-    post("status", { text: "numpy · openpyxl 준비 중…" });
-    await pyodide.loadPackage(["numpy", "openpyxl"]);
+    post("status", { text: "numpy 준비 중…" });
+    await pyodide.loadPackage(["numpy"]);
     post("status", { text: "model.py 불러오는 중…" });
-    const res = await fetch("model.py");
+    const res = await fetch("model.py?v=2");
     if (!res.ok) throw new Error("model.py를 읽지 못했습니다 (" + res.status + ")");
     pyodide.FS.writeFile("/home/pyodide/model.py", await res.text());
     pyodide.runPython("import sys\nif '/home/pyodide' not in sys.path: sys.path.insert(0, '/home/pyodide')");
