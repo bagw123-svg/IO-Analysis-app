@@ -26,7 +26,7 @@ async function init() {
     pyodide.FS.writeFile("/home/pyodide/model.py", await res.text());
     pyodide.runPython("import sys\nif '/home/pyodide' not in sys.path: sys.path.insert(0, '/home/pyodide')");
     model = pyodide.pyimport("model");
-    model.set_progress(pyodide.ffi.create_proxy(function (msg) { post("progress", { text: String(msg) }); }));
+    model.set_progress(function (msg) { post("progress", { text: String(msg) }); });
     post("ready", {});
   } catch (e) {
     post("fail", { text: String(e && e.message ? e.message : e) });
