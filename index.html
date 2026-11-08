@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>2023 산업연관분석 웹앱</title>
+  <meta name="description" content="한국은행 2023년 산업연관표(연장표) 투입산출표를 브라우저의 Python(Pyodide)으로 읽고 산업연관분석을 수행하는 웹앱">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <div>
+      <h1>2023 산업연관분석 웹앱</h1>
+      <p>한국은행 2023년 산업연관표(연장표) · 투입산출표(생산자가격) · 브라우저 안의 Python(Pyodide)으로 계산</p>
+    </div>
+    <div id="engine" class="engine" role="status">Python 엔진 준비 중…</div>
+  </div>
+</header>
+
+<main class="wrap">
+  <noscript><p class="note warn">이 웹앱은 JavaScript가 필요합니다.</p></noscript>
+
+  <!-- 1. 자료 불러오기 -->
+  <section class="card" id="sec-load">
+    <h2>1. 투입산출표 불러오기</h2>
+    <p class="muted">분석에 사용할 분류를 고르고 버튼을 누르면 저장소의 Excel 파일(<code>data/</code>)을 Python이 읽어 들입니다. 분류가 세분될수록 파일이 커서 시간이 더 걸립니다.</p>
+    <div class="chips" id="levels">
+      <label class="chip"><input type="radio" name="level" value="large" checked> <b>대분류</b> <small>33개 부문 · 0.6MB</small></label>
+      <label class="chip"><input type="radio" name="level" value="mid"> <b>중분류</b> <small>83개 부문 · 1.2MB</small></label>
+      <label class="chip"><input type="radio" name="level" value="small"> <b>소분류</b> <small>165개 부문 · 3.1MB</small></label>
+      <label class="chip"><input type="radio" name="level" value="basic"> <b>기본부문</b> <small>380개 부문 · 12.3MB</small></label>
+    </div>
+    <div class="row">
+      <button id="btn-load" class="primary" disabled>📥 투입산출표 불러오기</button>
+      <span id="load-msg" class="muted">Python 엔진이 준비되면 누를 수 있습니다.</span>
+    </div>
+    <progress id="load-bar" max="100" value="0" hidden></progress>
+    <p class="note" id="load-note" hidden></p>
+  </section>
+
+  <!-- 분석 영역 -->
+  <div id="app" hidden>
+    <nav class="tabs" id="tabs" role="tablist">
+      <button data-tab="summary" class="on">요약·검증</button>
+      <button data-tab="sheets">시트 보기</button>
+      <button data-tab="search">산업 검색</button>
+      <button data-tab="rank">지표·순위</button>
+      <button data-tab="fd">최종수요 유발효과</button>
+      <button data-tab="sim">시뮬레이터</button>
+      <button data-tab="guide">사용 안내·단위</button>
+    </nav>
+
+    <!-- 요약·검증 -->
+    <section class="pane card" id="pane-summary">
+      <h2>2023년 우리나라 경제구조 <small id="sum-level" class="muted"></small></h2>
+      <div class="kpis" id="kpis"></div>
+      <div class="grid2">
+        <div><h3>최종수요 구성 <small class="muted">(금액: 조원)</small></h3><div class="scroll" id="tb-fd"></div></div>
+        <div><h3>부가가치 구성 <small class="muted">(금액: 조원)</small></h3><div class="scroll" id="tb-va"></div></div>
+      </div>
+      <h3>한국은행 보도자료 대조 <small class="muted">(단위: 조원, 소수 첫째 자리)</small></h3>
+      <p class="muted">Excel 합계가 2025.9.24 보도자료의 수치와 같은지 확인합니다. 소비·투자는 항목 합산 시 반올림 차이로 ±0.1조원까지 허용합니다.</p>
+      <div class="scroll" id="tb-press"></div>
+      <h3>회계 항등식 검증 <small class="muted">(불러올 때 자동 실행)</small></h3>
+      <div class="scroll" id="tb-acct"></div>
+      <h3>계수표·역행렬 심화 검증</h3>
+      <p class="muted">Excel의 투입계수·유발계수 표를 Python이 다시 계산한 값과 비교합니다. 기본부문은 시간이 오래 걸릴 수 있습니다.</p>
+      <div class="row"><button id="btn-deep">🔎 심화 검증 실행</button><span id="deep-msg" class="muted"></span></div>
+      <div class="scroll" id="tb-deep"></div>
+    </section>
+
+    <!-- 시트 보기 -->
+    <section class="pane card" id="pane-sheets" hidden>
+      <h2>투입산출표 시트 보기</h2>
+      <p class="muted">Excel에 들어 있는 시트를 선택해 값을 확인합니다. 행(산업)과 열(산업)을 검색해 필요한 부분만 볼 수 있습니다.</p>
+      <div class="row">
+        <label>시트 <select id="sheet-sel"></select></label>
+        <label>행 검색 <input id="sheet-rq" type="search" placeholder="코드·산업명"></label>
+        <label>열 검색 <input id="sheet-cq" type="search" placeholder="코드·산업명"></label>
+      </div>
+      <p class="info" id="sheet-info"></p>
+      <div class="row">
+        <button id="sheet-prev">◀ 이전 10열</button>
+        <button id="sheet-next">다음 10열 ▶</button>
+        <span id="sheet-pos" class="muted"></span>
+      </div>
+      <div class="scroll tall" id="sheet-table"></div>
+    </section>
+
+    <!-- 산업 검색 -->
+    <section class="pane card" id="pane-search" hidden>
+      <h2>산업 검색과 산업별 분석</h2>
+      <p class="muted">산업명·코드로 검색합니다. 다른 분류(대·중·소분류, 기본부문)의 이름과 일치해도 현재 분류의 산업으로 연결해 보여줍니다. 예: “반도체”, “자동차”, “C09”.</p>
+      <div class="row">
+        <input id="s-q" type="search" placeholder="산업명 또는 코드" class="grow">
+        <button id="s-btn" class="primary">검색</button>
+      </div>
+      <p class="info" id="s-count"></p>
+      <div class="results" id="s-results"></div>
+      <div id="s-profile"></div>
+    </section>
+
+    <!-- 지표·순위 -->
+    <section class="pane card" id="pane-rank" hidden>
+      <h2>산업별 지표와 순위</h2>
+      <div class="row">
+        <label>지표 <select id="r-metric"></select></label>
+        <label>정렬 <select id="r-order"><option value="desc">큰 순서</option><option value="asc">작은 순서</option></select></label>
+        <label>표시 수 <select id="r-top"><option>10</option><option selected>15</option><option>30</option><option>50</option></select></label>
+      </div>
+      <p class="info" id="r-desc"></p>
+      <div id="r-chart"></div>
+      <h3>산업 유형 <small class="muted">(영향력계수·감응도계수 ≥ 1 기준)</small></h3>
+      <div class="chips" id="r-types"></div>
+      <div class="row">
+        <input id="r-q" type="search" placeholder="산업 이름·코드 필터" class="grow">
+        <button id="r-csv">⬇ 표 CSV 저장</button>
+      </div>
+      <p class="muted">열 제목을 누르면 정렬됩니다.</p>
+      <div class="scroll tall" id="r-table"></div>
+    </section>
+
+    <!-- 최종수요 유발효과 -->
+    <section class="pane card" id="pane-fd" hidden>
+      <h2>최종수요 항목별 유발효과</h2>
+      <p class="muted">소비·투자·수출이 만들어 내는 생산·부가가치·수입 유발액입니다(Excel의 “최종수요 항목별 유발액” 시트 활용). 금액 단위는 조원입니다.</p>
+      <div class="scroll" id="fd-table"></div>
+      <div class="row">
+        <label>항목 선택 <select id="fd-item"></select></label>
+      </div>
+      <h3 id="fd-title"></h3>
+      <div id="fd-chart"></div>
+      <div class="scroll" id="fd-top"></div>
+    </section>
+
+    <!-- 시뮬레이터 -->
+    <section class="pane card" id="pane-sim" hidden>
+      <h2>최종수요 충격 시뮬레이터</h2>
+      <p class="muted">특정 산업의 최종수요(소비·투자·수출 등)가 늘거나 줄 때 전 산업의 생산, 부가가치, 수입이 얼마나 유발되는지 계산합니다. <b>Δ생산 = B·Δ최종수요</b>, <b>Δ부가가치 = V·Δ최종수요</b>, <b>Δ수입 = M·Δ최종수요</b> (국산 최종수요 기준). 감소는 음수로 입력합니다.</p>
+      <datalist id="ind-list"></datalist>
+      <div id="sim-rows"></div>
+      <div class="row">
+        <button id="sim-add">＋ 산업 추가</button>
+        <button id="sim-run" class="primary">계산하기</button>
+        <span id="sim-msg" class="muted"></span>
+      </div>
+      <div id="sim-result"></div>
+    </section>
+
+    <!-- 사용 안내 -->
+    <section class="pane card" id="pane-guide" hidden>
+      <h2>사용 안내·단위·분석 방법</h2>
+      <h3>단위</h3>
+      <ul>
+        <li><b>거래액·유발액·총산출·부가가치</b>: 백만원 (2023년 당해년 가격, 생산자가격). 화면에서는 읽기 쉽게 억원·조원으로도 표시하며 그때마다 단위를 적었습니다. 1억원 = 100백만원, 1조원 = 1,000,000백만원.</li>
+        <li><b>투입계수·유발계수</b>: 단위 없음. 투입계수는 산업 j의 생산 1단위당 투입, 유발계수는 최종수요 1단위가 유발하는 크기입니다.</li>
+        <li><b>비율 지표</b>(부가가치율, 중간투입률, 수입의존도, 국산화율, 수출률, 수입률 등): %</li>
+        <li><b>영향력계수·감응도계수</b>: 지수, 전산업 평균 = 1.0</li>
+        <li>당해년 가격 자료이므로 연도 간 증감을 해석할 때 주의해야 하며, 모든 수치는 반올림되어 상위 부문과 하위 부문의 합이 다를 수 있습니다.</li>
+      </ul>
+      <h3>주요 지표 정의</h3>
+      <ul>
+        <li>중간투입률 = 중간투입 ÷ 총투입, 부가가치율 = 부가가치 ÷ 총투입 (총투입 = 총산출)</li>
+        <li>수입의존도 = 수입 중간재 투입 ÷ 총투입, 국산화율 = 국산 중간재 투입 ÷ 중간투입</li>
+        <li>수출률 = 수출 ÷ 총산출, 수입률 = 수입계 ÷ 총공급(= 총수요), 중간수요율 = 중간수요 ÷ 총수요</li>
+        <li>생산유발계수 B = (I − Ad)<sup>-1</sup>, 부가가치유발계수 V = v̂B, 수입유발계수 M = Am·B</li>
+        <li>영향력계수(후방연쇄) = B의 열합 ÷ 열합 평균, 감응도계수(전방연쇄) = B의 행합 ÷ 행합 평균</li>
+        <li>산업 유형: 영향력·감응도 모두 1 이상이면 <i>중추형</i>, 영향력만 크면 <i>최종수요 의존형</i>, 감응도만 크면 <i>중간재 공급형</i>, 둘 다 작으면 <i>독립형</i></li>
+      </ul>
+      <h3>한계</h3>
+      <ul>
+        <li>시뮬레이터는 수요 주도 투입산출 모형이라 공급 제약, 가격 변화, 대체 효과, 소득 증가에 따른 추가 소비(소득유발)를 반영하지 않습니다.</li>
+        <li>2023년 연장표는 2020년 실측표를 기준으로 간접 추계한 값입니다.</li>
+        <li>총산출이 0인 부문(소분류 1개, 기본부문 일부)은 비율·계수 지표를 계산하지 않고 “-”로 표시합니다.</li>
+      </ul>
+      <h3>자료 출처와 공개 권한</h3>
+      <p>한국은행 경제통계시스템(ECOS, <a href="https://ecos.bok.or.kr" target="_blank" rel="noopener">ecos.bok.or.kr</a>)과 보도자료(2025.9.24)에 공개된 통계입니다. 개인정보·비밀번호·API 키 등 민감한 자료는 포함하지 않았습니다.</p>
+      <h3>기술 구성</h3>
+      <p><code>index.html</code>(화면) · <code>style.css</code>(디자인) · <code>app.js</code>(버튼 동작과 결과 표시) · <code>worker.js</code>(별도 작업 공간에서 Python 실행) · <code>model.py</code>(Excel 읽기, 검증, 경제 계산) · <code>data/</code>(분석 대상 Excel)</p>
+    </section>
+  </div>
+</main>
+
+<footer class="wrap foot">
+  <p>자료: 한국은행 2023년 산업연관표(연장표) · 계산 엔진: Pyodide(Python 3, numpy, openpyxl) · GitHub Pages 정적 호스팅</p>
+</footer>
+<script src="app.js"></script>
+</body>
+</html>
